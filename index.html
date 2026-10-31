@@ -5554,13 +5554,107 @@ setAdminStatus('Owner panel ready.');
    if(createError){if(createError.code==='23505')throw new Error('That username is already taken. Please create your account with another username.');throw createError;}
    return created;
  }
+ const isGameSaveKey=(key)=>key.startsWith('saw_')||key.startsWith('hod_')||key==='spinwin_rare_animations';
+ function collectGameSave(){
+   const snapshot={};
+   for(let i=0;i<localStorage.length;i++){
+     const key=localStorage.key(i);
+     if(key&&isGameSaveKey(key))snapshot[key]=localStorage.getItem(key);
+   }
+   return snapshot;
+ }
+ function restoreGameSave(snapshot){
+   if(!snapshot||typeof snapshot!=='object'||Array.isArray(snapshot))return;
+   Object.entries(snapshot).forEach(([key,value])=>{
+     if(isGameSaveKey(key)&&value!==null&&value!==undefined){
+       localStorage.setItem(key,typeof value==='string'?value:String(value));
+     }
+   });
+ }
+ let cloudSaveTimer=null,cloudSaveInterval=null,cloudSaveBusy=false,cloudSaveQueued=false;
+ async function writeCloudSave(){
+   const user=window.spinWinOnlineUser;
+   if(!user)return;
+   if(cloudSaveBusy){cloudSaveQueued=true;return;}
+   cloudSaveBusy=true;
+   try{
+     const {error}=await client.from('game_saves').upsert({
+       user_id:user.id,
+       save_data:collectGameSave(),
+       updated_at:new Date().toISOString()
+     },{onConflict:'user_id'});
+     if(error)throw error;
+     window.spinWinCloudSaveLastSuccess=Date.now();
+   }catch(error){
+     console.warn('[Spin & Win] Cloud save failed:',error.message||error);
+     window.spinWinCloudSaveError=error.message||String(error);
+   }finally{
+     cloudSaveBusy=false;
+     if(cloudSaveQueued){cloudSaveQueued=false;setTimeout(writeCloudSave,250);}
+   }
+ }
+ function scheduleCloudSave(){
+   if(!window.spinWinOnlineUser)return;
+   clearTimeout(cloudSaveTimer);
+   cloudSaveTimer=setTimeout(writeCloudSave,900);
+ }
+ function startCloudSync(){
+   if(!window.__spinWinCloudStorageHook){
+     const originalSetItem=Storage.prototype.setItem;
+     const originalRemoveItem=Storage.prototype.removeItem;
+     const originalClear=Storage.prototype.clear;
+     Storage.prototype.setItem=function(key,value){
+       const result=originalSetItem.call(this,key,value);
+       if(this===window.localStorage&&isGameSaveKey(String(key)))scheduleCloudSave();
+       return result;
+     };
+     Storage.prototype.removeItem=function(key){
+       const result=originalRemoveItem.call(this,key);
+       if(this===window.localStorage&&isGameSaveKey(String(key)))scheduleCloudSave();
+       return result;
+     };
+     Storage.prototype.clear=function(){
+       const result=originalClear.call(this);
+       if(this===window.localStorage)scheduleCloudSave();
+       return result;
+     };
+     window.__spinWinCloudStorageHook=true;
+   }
+   if(!cloudSaveInterval)cloudSaveInterval=setInterval(writeCloudSave,15000);
+   if(!window.__spinWinCloudLifecycleHooks){
+     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')writeCloudSave();});
+     window.addEventListener('pagehide',()=>writeCloudSave());
+     window.__spinWinCloudLifecycleHooks=true;
+   }
+   // Push an initial snapshot after the game is unlocked.
+   setTimeout(writeCloudSave,1200);
+ }
  async function enterGame(user){
    try{
      const profile=await ensureProfile(user);
+     const restoreFlag='spinwin_cloud_restore_once_'+user.id;
+     if(sessionStorage.getItem(restoreFlag)==='1'){
+       sessionStorage.removeItem(restoreFlag);
+     }else{
+       const {data:cloudSave,error:loadError}=await client.from('game_saves').select('save_data').eq('user_id',user.id).maybeSingle();
+       if(loadError)throw loadError;
+       if(cloudSave&&cloudSave.save_data&&typeof cloudSave.save_data==='object'&&!Array.isArray(cloudSave.save_data)){
+         restoreGameSave(cloudSave.save_data);
+         sessionStorage.setItem(restoreFlag,'1');
+         location.reload();
+         return;
+       }
+       // First login: keep this browser's current game state and create the player's first cloud save.
+       const {error:createSaveError}=await client.from('game_saves').upsert({
+         user_id:user.id,save_data:collectGameSave(),updated_at:new Date().toISOString()
+       },{onConflict:'user_id'});
+       if(createSaveError)throw createSaveError;
+     }
      window.spinWinOnlineUser={id:user.id,email:user.email,username:profile.username};
+     startCloudSync();
      gate.hidden=true;
      window.dispatchEvent(new CustomEvent('spinwin:online-ready',{detail:window.spinWinOnlineUser}));
-   }catch(error){say(error.message||'Could not load your player profile.','error');}
+   }catch(error){say(error.message||'Could not load your player profile or cloud save.','error');}
  }
  async function boot(){
    if(!window.supabase?.createClient){say('Could not load the online service. Check your internet connection and refresh.','error');return;}
