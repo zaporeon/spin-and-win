@@ -2408,9 +2408,9 @@ button:hover{background:#29b84d;transform:scale(1.055);box-shadow:0 0 28px #39ff
     <div class="progressHero trophyHero"><div style="font-size:12px;letter-spacing:3px;color:#9f9aff;font-weight:900">SPIN & WIN • TROPHY ROAD</div><h1 style="font-size:clamp(30px,5vw,46px);margin:8px 0">🏆 TROPHY ROAD</h1><div style="color:#aeb9d0">A single journey from 0 to 40,000 trophies. Scroll right to unlock exclusive characters, auras, trails, permanent titles and coin caches. Title Vouchers are ultra-rare Halloween Crate drops.</div><div class="trophyTotal"><span>🏆</span><strong id="totalTrophies">0</strong><small>TROPHIES</small></div><div class="trophyProgressTrack"><div id="trophyProgressFill"></div></div><div class="trophyProgressCaption" id="trophyProgressCaption">Reach the next milestone to claim a reward.</div><div class="trophyMultiplierBadge" id="trophyMultiplierBadge">SPIN TROPHY MULTIPLIER · 1×</div></div>
     <section class="progressPanel trophyRoadPanel"><div class="trophyRoadHeading"><div><div class="trophyEyebrow">0 → 40,000 TROPHIES</div><h2 style="margin:4px 0">Your Trophy Journey</h2></div><div class="trophyScrollControls"><button id="trophyScrollLeft" type="button" aria-label="Scroll trophy rewards left">◀ PREVIOUS</button><span class="trophyLegend">Scroll or use the arrows to explore rewards</span><button id="trophyScrollRight" type="button" aria-label="Scroll trophy rewards right">NEXT ▶</button></div></div><div id="trophyRoad" class="trophyRoad" tabindex="0" aria-label="Horizontal trophy reward track"></div><div class="trophyRoadHint">Every 250 trophies unlocks a reward milestone. Continue scrolling right to reach the 40,000-trophy finale.</div></section>
     <section class="progressPanel leaderboardPanel">
-      <div class="leaderboardTop"><div><div class="trophyEyebrow">HALL OF FAME</div><h2 style="margin:4px 0">🏆 Trophy Leaderboard</h2><div class="leaderboardSub">Climb higher to move up the rankings.</div></div><div class="localBoardBadge">LOCAL DEMO · OFFLINE</div></div>
-      <div class="leaderboardRows" id="leaderboardRows"></div>
-      <div class="leaderboardFoot">Sample rivals are simulated for the visual leaderboard. This standalone HTML game does not have an online server, so rankings are not shared between players.</div>
+      <div class="leaderboardTop"><div><div class="trophyEyebrow">HALL OF FAME</div><h2 style="margin:4px 0">🏆 Trophy Leaderboard</h2><div class="leaderboardSub">Climb higher to move up the rankings.</div></div><div class="localBoardBadge" id="leaderboardStatus">CONNECTING TO ONLINE BOARD…</div></div>
+      <div class="leaderboardRows" id="leaderboardRows" aria-live="polite"></div>
+      <div class="leaderboardFoot" id="leaderboardFoot">Real player rankings are loaded from Supabase. Your score updates automatically while you play.</div>
     </section>
     <div class="progressLayout">
       <section class="progressPanel"><div style="font-size:12px;letter-spacing:2px;color:#83d8ff;font-weight:900">DAILY LOGIN BONUS</div><div class="streakNumber" id="streakNumber">DAY 1</div><div id="dailyBonusText" class="progressStat">Claim today's reward to keep your streak going.</div><div id="dailyRewardPreview" style="font-size:20px;font-weight:900;margin-top:14px;color:#ffdc75">🪙 +250 COINS</div><button id="claimDailyBonus" class="progressReward">CLAIM DAILY BONUS</button><div class="progressStat" id="dailyStatus" style="margin-top:10px"></div><div style="height:1px;background:#273149;margin:18px 0"></div><div style="font-weight:900;font-size:14px">YOUR PROFILE</div><div id="profileStats" style="display:grid;gap:9px;margin-top:12px"></div></section>
@@ -3435,18 +3435,65 @@ function renderTrophyRoad(){
  road.scrollLeft=previousScroll;
  renderTitleEditor();
 }
-function renderLeaderboard(){
+let leaderboardRenderToken=0;
+async function renderLeaderboard(){
  const host=document.getElementById('leaderboardRows');if(!host)return;
- const rivals=[
-  {name:'NovaKnight',tag:'SIMULATED RIVAL',trophies:12500,icon:'👑',tone:'gold'},
-  {name:'PixelPhantom',tag:'SIMULATED RIVAL',trophies:8200,icon:'🌌',tone:'violet'},
-  {name:'FrostByte',tag:'SIMULATED RIVAL',trophies:4700,icon:'❄️',tone:'blue'},
-  {name:'ShadowSpark',tag:'SIMULATED RIVAL',trophies:1850,icon:'⚡',tone:'orange'},
-  {name:'YOU',tag:'YOUR LOCAL SAVE',trophies:gameTrophies,icon:'🧑‍🚀',tone:'you',you:true}
- ].sort((a,b)=>b.trophies-a.trophies);
- host.innerHTML='';rivals.forEach((p,i)=>{const row=document.createElement('div');row.className='leaderboardRow rank'+(i+1)+' '+p.tone+(p.you?' isYou':'');row.innerHTML=`<div class="leaderRank rank${i+1}">${i===0?'👑':String(i+1).padStart(2,'0')}</div><div class="leaderAvatar">${p.icon}</div><div class="leaderPlayer"><b>${p.name}</b><small>${p.tag}</small></div><div class="leaderTrophies">🏆 ${p.trophies.toLocaleString()}</div>`;host.appendChild(row);});
- const youRank=rivals.findIndex(p=>p.you)+1;const youRow=host.querySelector('.isYou');if(youRow){const player=youRow.querySelector('.leaderPlayer small');if(player)player.textContent=`YOUR LOCAL SAVE · RANK #${youRank}`;}
+ const badge=document.getElementById('leaderboardStatus');
+ const foot=document.getElementById('leaderboardFoot');
+ const client=window.spinWinSupabase;
+ const currentUser=window.spinWinOnlineUser;
+ const token=++leaderboardRenderToken;
+ if(!client||!currentUser){
+  if(badge)badge.textContent='ACCOUNT CONNECTION REQUIRED';
+  host.textContent='Log in to view the online leaderboard.';
+  if(foot)foot.textContent='Your rankings are shared with other Spin & Win players after you connect your account.';
+  return;
+ }
+ if(badge)badge.textContent='ONLINE · SUPABASE';
+ host.textContent='Loading real player rankings…';
+ try{
+  const [scoreResult,profileResult]=await Promise.all([
+   client.from('player_scores').select('user_id,trophies,updated_at').order('trophies',{ascending:false}).limit(100),
+   client.from('profiles').select('id,username')
+  ]);
+  if(scoreResult.error)throw scoreResult.error;
+  if(profileResult.error)throw profileResult.error;
+  if(token!==leaderboardRenderToken)return;
+  const names=new Map((profileResult.data||[]).map(p=>[p.id,p.username]));
+  const rows=(scoreResult.data||[]).map(r=>({id:r.user_id,username:names.get(r.user_id)||'Player',trophies:Math.max(0,Number(r.trophies)||0)})).sort((a,b)=>b.trophies-a.trophies).slice(0,50);
+  host.replaceChildren();
+  if(!rows.length){
+   host.textContent='No ranked players yet. Your first score will appear shortly.';
+   if(foot)foot.textContent='Your score is published automatically after your first cloud-save sync.';
+   return;
+  }
+  rows.forEach((player,index)=>{
+   const row=document.createElement('div');
+   row.className='leaderboardRow rank'+(index+1)+(player.id===currentUser.id?' isYou':'');
+   const rank=document.createElement('div');rank.className='leaderRank';rank.textContent=index===0?'👑':String(index+1).padStart(2,'0');
+   const avatar=document.createElement('div');avatar.className='leaderAvatar';avatar.textContent=index===0?'👑':'🏆';
+   const identity=document.createElement('div');identity.className='leaderPlayer';
+   const name=document.createElement('b');name.textContent=player.username;
+   const tag=document.createElement('small');tag.textContent=player.id===currentUser.id?'YOU · ONLINE PLAYER':'ONLINE PLAYER';
+   identity.append(name,tag);
+   const score=document.createElement('div');score.className='leaderTrophies';score.textContent='🏆 '+player.trophies.toLocaleString();
+   row.append(rank,avatar,identity,score);host.appendChild(row);
+  });
+  const ownIndex=rows.findIndex(p=>p.id===currentUser.id);
+  if(foot)foot.textContent=ownIndex>=0?`Showing ${rows.length} real player(s). Your current position: #${ownIndex+1}.`:`Showing ${rows.length} real player(s). Your score will appear after its next sync.`;
+ }catch(error){
+  if(token!==leaderboardRenderToken)return;
+  console.warn('[Spin & Win] Online leaderboard unavailable:',error.message||error);
+  if(badge)badge.textContent='LEADERBOARD SETUP NEEDED';
+  host.textContent='The online leaderboard table is not ready yet. Complete the Supabase SQL setup, then refresh.';
+  if(foot)foot.textContent='Your existing cloud save is safe. This setup only creates a separate public ranking table.';
+ }
 }
+window.addEventListener('spinwin:online-ready',()=>renderLeaderboard());
+window.addEventListener('spinwin:leaderboard-updated',()=>{
+ const hub=document.getElementById('progressHub');
+ if(hub&&!hub.classList.contains('hidden'))renderLeaderboard();
+});
 
 function openProgressHub(){menu.classList.add('hidden');progressHub.classList.remove('hidden');renderProgressHub();}
 function closeProgressHubFn(){progressHub.classList.add('hidden');menu.classList.remove('hidden');updateCoinsUI();updateStats();}
@@ -5572,6 +5619,14 @@ setAdminStatus('Owner panel ready.');
    });
  }
  let cloudSaveTimer=null,cloudSaveInterval=null,cloudSaveBusy=false,cloudSaveQueued=false;
+ async function syncLeaderboardScore(){
+   const user=window.spinWinOnlineUser;if(!user)return;
+   const trophies=Math.max(0,Math.floor(Number(localStorage.getItem('saw_game_trophies'))||0));
+   const {error}=await client.from('player_scores').upsert({user_id:user.id,trophies,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+   if(error){window.spinWinLeaderboardError=error.message||String(error);console.warn('[Spin & Win] Leaderboard score sync failed:',window.spinWinLeaderboardError);return;}
+   window.spinWinLeaderboardError=null;
+   window.dispatchEvent(new CustomEvent('spinwin:leaderboard-updated'));
+ }
  async function writeCloudSave(){
    const user=window.spinWinOnlineUser;
    if(!user)return;
@@ -5585,6 +5640,7 @@ setAdminStatus('Owner panel ready.');
      },{onConflict:'user_id'});
      if(error)throw error;
      window.spinWinCloudSaveLastSuccess=Date.now();
+     await syncLeaderboardScore();
    }catch(error){
      console.warn('[Spin & Win] Cloud save failed:',error.message||error);
      window.spinWinCloudSaveError=error.message||String(error);
@@ -5693,6 +5749,43 @@ setAdminStatus('Owner panel ready.');
  boot().catch(error=>say(error.message||'Could not connect to the online service.','error'));
 })();
 </script>
+
+
+<style id="spinwin-mastery-compact-v13">
+/* Character Mastery v13: wide, compact roster grid instead of a narrow vertical column. */
+#characterMasteryScreen{align-items:stretch!important;gap:12px!important;padding:16px clamp(10px,2vw,24px) 22px!important;}
+#characterMasteryScreen>.masteryFeatureHero,
+#characterMasteryScreen>.featurePanel{width:min(1280px,100%)!important;max-width:1280px!important;min-width:0!important;box-sizing:border-box!important;margin:0 auto!important;flex:0 0 auto!important;}
+#characterMasteryScreen>.masteryFeatureHero{padding:16px 20px!important;border-radius:16px!important;}
+#characterMasteryScreen>.masteryFeatureHero h1{font-size:clamp(25px,3vw,36px)!important;margin:5px 0!important;}
+#characterMasteryScreen>.masteryFeatureHero p{max-width:980px!important;font-size:12px!important;line-height:1.45!important;}
+#characterMasteryScreen .featureStatsRow{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;margin-top:11px!important;}
+#characterMasteryScreen .featureStat{padding:8px 11px!important;}
+#characterMasteryScreen .featureStat strong{font-size:clamp(16px,1.8vw,21px)!important;margin-top:2px!important;}
+#characterMasteryScreen>.featurePanel{padding:14px!important;border-radius:16px!important;}
+#characterMasteryScreen .featureSectionHeading{margin-bottom:10px!important;}
+#characterMasteryScreen .masteryToolbar{margin-bottom:11px!important;}
+#characterMasteryScreen .masteryToolbar input[type="search"]{height:38px!important;flex-basis:320px!important;}
+#characterMasteryScreen .characterMasteryGrid{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:stretch!important;gap:9px!important;width:100%!important;}
+#characterMasteryScreen .masteryCharacterCard{padding:10px!important;gap:7px!important;border-radius:11px!important;min-width:0!important;}
+#characterMasteryScreen .masteryCharacterHeader{grid-template-columns:42px minmax(0,1fr)!important;gap:7px!important;position:relative!important;padding-bottom:19px!important;}
+#characterMasteryScreen .masteryCharacterIcon{width:42px!important;height:42px!important;border-radius:9px!important;}
+#characterMasteryScreen .masteryCharacterIcon img{max-width:39px!important;max-height:39px!important;}
+#characterMasteryScreen .masteryCharacterName{font-size:12px!important;line-height:1.15!important;}
+#characterMasteryScreen .masteryCharacterRarity{font-size:9px!important;margin-top:2px!important;}
+#characterMasteryScreen .masteryRankBadge{position:absolute!important;left:0!important;bottom:0!important;padding:3px 6px!important;font-size:8px!important;}
+#characterMasteryScreen .masteryXPLine{font-size:9px!important;gap:4px!important;}
+#characterMasteryScreen .masteryProgressTrack{height:7px!important;}
+#characterMasteryScreen .masteryRankTrack{gap:3px!important;}
+#characterMasteryScreen .masteryRankStep{padding:4px 1px!important;font-size:8px!important;}
+#characterMasteryScreen .masteryNextReward{min-height:31px!important;padding:6px!important;font-size:9px!important;line-height:1.35!important;}
+#characterMasteryScreen .masteryCharacterCard button{min-height:30px!important;height:30px!important;padding:4px 6px!important;font-size:9px!important;}
+#characterMasteryScreen>.featureBackButton{align-self:center!important;flex:0 0 auto!important;margin:0 auto!important;}
+@media(max-width:1120px){#characterMasteryScreen .characterMasteryGrid{grid-template-columns:repeat(4,minmax(0,1fr))!important;}}
+@media(max-width:850px){#characterMasteryScreen .characterMasteryGrid{grid-template-columns:repeat(3,minmax(0,1fr))!important;}}
+@media(max-width:620px){#characterMasteryScreen .characterMasteryGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}#characterMasteryScreen .featureStatsRow{grid-template-columns:repeat(3,minmax(0,1fr))!important;}#characterMasteryScreen .featureStat{padding:7px 6px!important;}#characterMasteryScreen .featureStat small{font-size:8px!important;}}
+@media(max-width:390px){#characterMasteryScreen .characterMasteryGrid{grid-template-columns:1fr!important;}#characterMasteryScreen .featureStatsRow{grid-template-columns:1fr!important;}}
+</style>
 
 </body>
 </html>
