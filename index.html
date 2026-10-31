@@ -2388,6 +2388,7 @@ button:hover{background:#29b84d;transform:scale(1.055);box-shadow:0 0 28px #39ff
     <button id="shopButton" style="margin-top:14px;background:#171717;border-color:#ffd34d;font-size:20px;height:58px">🪙 SHOP</button>
     <button id="questButton" class="questBtn"><span class="questBtnIcon">📜</span><span class="questBtnText"><strong>QUEST BOARD</strong><small>DAILY REWARDS</small></span></button>
     <button id="progressButton" class="questBtn trophyBtn"><span class="questBtnIcon">🏆</span><span class="questBtnText"><strong>TROPHY ROAD</strong><small>REWARDS • PROGRESSION</small></span></button>
+    <button id="playerProfileButton" class="questBtn playerProfileHomeBtn"><span class="questBtnIcon">👤</span><span class="questBtnText"><strong>PLAYER PROFILE</strong><small>YOUR STATS • SHOWCASE • IDENTITY</small></span></button>
     <button id="titleWorkshopButton" class="questBtn titleWorkshopHomeBtn"><span class="questBtnIcon">🏷️</span><span class="questBtnText"><strong>TITLE WORKSHOP</strong><small>MY TITLES • CUSTOM TITLE</small></span></button>
     <button id="riftExpeditionButton" class="questBtn riftExpeditionHomeBtn"><span class="questBtnIcon">🌀</span><span class="questBtnText"><strong>RIFT EXPEDITION</strong><small>10 STAGES • PERMANENT REWARDS</small></span></button>
     <button id="characterMasteryButton" class="questBtn masteryHomeBtn"><span class="questBtnIcon">✦</span><span class="questBtnText"><strong>CHARACTER MASTERY</strong><small>5 RANKS • UNIQUE REWARDS</small></span></button>
@@ -2417,6 +2418,36 @@ button:hover{background:#29b84d;transform:scale(1.055);box-shadow:0 0 28px #39ff
       <section class="progressPanel"><div style="font-size:12px;letter-spacing:2px;color:#bba6ff;font-weight:900">PERMANENT MILESTONES</div><h2 style="margin:7px 0">Achievements</h2><div class="progressStat">Complete goals to earn one-time coin rewards.</div><div id="achievementList" class="achievementList"></div></section>
     </div>
     <button id="closeProgressHub" style="width:min(380px,90vw);height:52px;margin-top:18px;background:#171b29;border-color:#4b5875">BACK TO MENU</button>
+  </div>
+
+  <div id="playerProfileScreen" class="hidden" aria-label="Player Profile">
+    <div class="playerProfileShell">
+      <div class="playerProfileTopbar"><div><div class="playerProfileEyebrow">SPIN &amp; WIN • PLAYER IDENTITY</div><h1>PLAYER PROFILE</h1></div><button id="playerProfileClose" type="button">CLOSE ✕</button></div>
+      <div id="playerProfileStatus" class="playerProfileStatus" aria-live="polite">Loading player profile…</div>
+      <section class="playerProfileHero">
+        <div class="playerProfileAvatar" id="playerProfileAvatar">✦</div>
+        <div class="playerProfileIdentity"><div class="playerProfileName" id="playerProfileName">PLAYER</div><div class="playerProfileTag" id="playerProfileTag">ONLINE PLAYER</div><div class="playerProfileTitle" id="playerProfileTitle">No title equipped</div></div>
+        <div class="playerProfileRank" id="playerProfileRank">UNRANKED</div>
+      </section>
+      <section class="playerProfileShowcase">
+        <div class="playerProfileSectionHead"><span>PLAYER SHOWCASE</span><small>YOUR EQUIPPED STYLE</small></div>
+        <div class="playerProfileShowcaseGrid">
+          <div class="playerProfileShowcaseCard"><span>🎭 EQUIPPED CHARACTER</span><strong id="playerProfileCharacter">Classic Stickman</strong></div>
+          <div class="playerProfileShowcaseCard"><span>✨ EQUIPPED AURA</span><strong id="playerProfileAura">White</strong></div>
+          <div class="playerProfileShowcaseCard"><span>🏅 BEST RARITY</span><strong id="playerProfileBestRarity">None</strong></div>
+        </div>
+      </section>
+      <section class="playerProfileStats">
+        <div class="playerProfileSectionHead"><span>PLAYER STATISTICS</span><small>PUBLIC GAME STATS</small></div>
+        <div class="playerProfileStatGrid">
+          <div><strong id="playerProfileTrophies">0</strong><span>TROPHIES</span></div>
+          <div><strong id="playerProfileSpins">0</strong><span>TOTAL SPINS</span></div>
+          <div><strong id="playerProfileCharacters">0</strong><span>CHARACTERS</span></div>
+          <div><strong id="playerProfileCrafts">0</strong><span>FORGED VARIANTS</span></div>
+        </div>
+      </section>
+      <div class="playerProfileFooter" id="playerProfileFooter">Player stats are shared with the Spin &amp; Win community.</div>
+    </div>
   </div>
 
   <div id="titleWorkshopScreen" class="hidden" aria-label="Title Workshop">
@@ -3470,6 +3501,9 @@ async function renderLeaderboard(){
   rows.forEach((player,index)=>{
    const row=document.createElement('div');
    row.className='leaderboardRow rank'+(index+1)+(player.id===currentUser.id?' isYou':'');
+   row.classList.add('leaderboardProfileLink');row.setAttribute('role','button');row.setAttribute('tabindex','0');row.setAttribute('aria-label','View '+player.username+' player profile');
+   row.addEventListener('click',()=>window.openSpinWinPlayerProfile&&window.openSpinWinPlayerProfile(player.id));
+   row.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();window.openSpinWinPlayerProfile&&window.openSpinWinPlayerProfile(player.id);}});
    const rank=document.createElement('div');rank.className='leaderRank';rank.textContent=index===0?'👑':String(index+1).padStart(2,'0');
    const avatar=document.createElement('div');avatar.className='leaderAvatar';avatar.textContent=index===0?'👑':'🏆';
    const identity=document.createElement('div');identity.className='leaderPlayer';
@@ -5123,7 +5157,7 @@ setAdminStatus('Owner panel ready.');
  const coinsDisplay=document.getElementById('secretShopCoins');
  const status=document.getElementById('secretShopStatus');
  const globalClose=document.getElementById('globalMenuClose');
- const overlayIds=['borreSecretShop','shop','customizer','cosmetics','crafting','quests','progressHub','titleWorkshopScreen','riftExpeditionScreen','characterMasteryScreen','halloweenCrateScreen','adminGate','adminPanel'];
+ const overlayIds=['borreSecretShop','shop','customizer','cosmetics','crafting','quests','progressHub','playerProfileScreen','titleWorkshopScreen','riftExpeditionScreen','characterMasteryScreen','halloweenCrateScreen','adminGate','adminPanel'];
  const visible=id=>{const el=document.getElementById(id);if(!el)return false;if(el.classList.contains('hidden'))return false;if(id==='crafting'&&getComputedStyle(el).display==='none')return false;return true;};
  function refreshClose(){const any=overlayIds.some(visible);globalClose.classList.toggle('visible',any);}
  const watcher=new MutationObserver(refreshClose);
@@ -5155,6 +5189,7 @@ setAdminStatus('Owner panel ready.');
    if(visible('cosmetics')){clickIf('closeSkins');return;}
    if(visible('crafting')){clickIf('closeCrafting');return;}
    if(visible('quests')){clickIf('closeQuests');return;}
+   if(visible('playerProfileScreen')){clickIf('playerProfileClose');return;}
    if(visible('progressHub')){clickIf('closeProgressHub');return;}
    if(visible('titleWorkshopScreen')){clickIf('closeTitleWorkshop');return;}
    if(visible('riftExpeditionScreen')){clickIf('closeRiftExpedition');return;}
@@ -5641,6 +5676,7 @@ setAdminStatus('Owner panel ready.');
      if(error)throw error;
      window.spinWinCloudSaveLastSuccess=Date.now();
      await syncLeaderboardScore();
+     if(window.spinWinSyncPublicProfile)await window.spinWinSyncPublicProfile();
    }catch(error){
      console.warn('[Spin & Win] Cloud save failed:',error.message||error);
      window.spinWinCloudSaveError=error.message||String(error);
@@ -5786,6 +5822,137 @@ setAdminStatus('Owner panel ready.');
 @media(max-width:620px){#characterMasteryScreen .characterMasteryGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}#characterMasteryScreen .featureStatsRow{grid-template-columns:repeat(3,minmax(0,1fr))!important;}#characterMasteryScreen .featureStat{padding:7px 6px!important;}#characterMasteryScreen .featureStat small{font-size:8px!important;}}
 @media(max-width:390px){#characterMasteryScreen .characterMasteryGrid{grid-template-columns:1fr!important;}#characterMasteryScreen .featureStatsRow{grid-template-columns:1fr!important;}}
 </style>
+
+
+<style id="spinwin-player-profiles-v14">
+#playerProfileButton{border-color:#72cfff!important;background:linear-gradient(115deg,#14283b,#171b29 65%,#172e3b)!important;}
+#playerProfileScreen{position:fixed!important;inset:0!important;z-index:99000!important;overflow:auto!important;display:flex;align-items:flex-start;justify-content:center;padding:clamp(12px,3vw,30px)!important;box-sizing:border-box;background:radial-gradient(ellipse at 50% 0%,#21415c 0,transparent 48%),linear-gradient(145deg,#080d16,#111827 55%,#090d15)!important;color:#f4f7ff!important;}
+#playerProfileScreen.hidden{display:none!important;}
+.playerProfileShell{width:min(980px,100%);margin:auto;display:flex;flex-direction:column;gap:16px;}
+.playerProfileTopbar{display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.playerProfileEyebrow,.playerProfileSectionHead{font-size:10px;letter-spacing:2.5px;font-weight:950;color:#7edaff;}
+.playerProfileTopbar h1{font-size:clamp(25px,4vw,38px);letter-spacing:2px;margin:5px 0 0;text-shadow:0 0 22px #55bfff44;}
+#playerProfileClose{border:1px solid #52657e;background:#141e2c;color:#fff;border-radius:10px;padding:11px 16px;font-weight:900;cursor:pointer;}
+.playerProfileStatus{min-height:18px;color:#aebbd0;font-size:12px;text-align:center;}
+.playerProfileHero,.playerProfileShowcase,.playerProfileStats{border:1px solid #2c4058;border-radius:18px;background:linear-gradient(135deg,#172538ed,#0e1724f5);box-shadow:0 14px 34px #0005,inset 0 1px #ffffff0b;padding:clamp(15px,3vw,24px);}
+.playerProfileHero{display:grid;grid-template-columns:88px minmax(0,1fr) auto;align-items:center;gap:18px;background:radial-gradient(ellipse at 8% 0%,#2672a344,transparent 50%),linear-gradient(120deg,#182c43,#111b2a);}
+.playerProfileAvatar{width:82px;height:82px;border-radius:22px;display:grid;place-items:center;font-size:34px;font-weight:1000;color:#d8f5ff;background:linear-gradient(145deg,#235477,#182c43);border:1px solid #6bcfff88;box-shadow:0 0 30px #3bbdff22,inset 0 0 0 5px #ffffff08;}
+.playerProfileName{font-size:clamp(22px,4vw,34px);font-weight:1000;letter-spacing:.4px;overflow-wrap:anywhere;}
+.playerProfileTag{font-size:10px;color:#86d9ff;font-weight:900;letter-spacing:1.7px;margin-top:4px;}
+.playerProfileTitle{font-size:13px;color:#e8caff;margin-top:9px;font-weight:800;}
+.playerProfileRank{padding:9px 12px;border-radius:10px;border:1px solid #9b8a53;background:#332d1b;color:#ffe5a1;font-size:11px;font-weight:1000;letter-spacing:1px;text-align:center;}
+.playerProfileSectionHead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;}
+.playerProfileSectionHead small{font-size:9px;color:#8294ac;letter-spacing:1.3px;}
+.playerProfileShowcaseGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.playerProfileShowcaseCard{min-width:0;padding:15px;border-radius:12px;border:1px solid #2c4058;background:linear-gradient(145deg,#111d2d,#0c1420);display:flex;flex-direction:column;gap:9px;}
+.playerProfileShowcaseCard span{font-size:9px;letter-spacing:1px;color:#91a8c2;font-weight:900;}
+.playerProfileShowcaseCard strong{font-size:clamp(13px,2vw,17px);color:#f3f7ff;overflow-wrap:anywhere;}
+.playerProfileStatGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+.playerProfileStatGrid>div{padding:17px 10px;border-radius:12px;background:#101b2a;border:1px solid #2a3e55;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;}
+.playerProfileStatGrid strong{font-size:clamp(19px,3vw,27px);color:#9de5ff;font-weight:1000;overflow-wrap:anywhere;}
+.playerProfileStatGrid span{font-size:9px;color:#91a4bd;letter-spacing:1px;font-weight:900;text-align:center;}
+.playerProfileFooter{text-align:center;color:#71839c;font-size:10px;padding:2px 0 8px;}
+.leaderboardProfileLink{cursor:pointer;transition:transform .15s ease,border-color .15s ease;}
+.leaderboardProfileLink:hover{transform:translateY(-2px);border-color:#70d5ff!important;}
+.leaderboardProfileLink:focus-visible{outline:2px solid #75d9ff;outline-offset:3px;}
+@media(max-width:620px){.playerProfileHero{grid-template-columns:62px minmax(0,1fr);gap:12px}.playerProfileAvatar{width:60px;height:60px;border-radius:16px;font-size:26px}.playerProfileRank{grid-column:1/-1;justify-self:start}.playerProfileShowcaseGrid{grid-template-columns:1fr}.playerProfileStatGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.playerProfileSectionHead{align-items:flex-start;flex-direction:column;gap:5px}}
+</style>
+
+
+<script id="spinwin-player-profiles-v14">
+(()=>{
+ 'use strict';
+ const $=id=>document.getElementById(id);
+ const screen=$('playerProfileScreen');
+ if(!screen)return;
+ let returnToProgress=false;
+ const fmt=value=>Math.max(0,Number(value)||0).toLocaleString();
+ const pretty=value=>String(value||'').replace(/[_-]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+ const setText=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'');};
+ function localSnapshot(){
+  const read=(key,fallback)=>{const value=localStorage.getItem(key);return value===null?fallback:value;};
+  let owned=[],crafted=[];
+  try{owned=JSON.parse(read('hod_owned_skins','["stickman"]'));if(!Array.isArray(owned))owned=[];}catch(_){owned=[];}
+  try{crafted=JSON.parse(read('saw_crafted_variants','[]'));if(!Array.isArray(crafted))crafted=[];}catch(_){crafted=[];}
+  const rawTitle=read('saw_equipped_title','');
+  const customTitle=read('saw_custom_title_text','');
+  const title=rawTitle.startsWith('custom:')&&customTitle?customTitle:(rawTitle||'No title equipped');
+  return {
+   equipped_character:read('hod_equipped_skin','stickman'),
+   equipped_aura:read('hod_equipped_effect','white'),
+   equipped_title:title,
+   trophies:Math.max(0,Math.floor(Number(read('saw_game_trophies','0'))||0)),
+   total_spins:Math.max(0,Math.floor(Number(read('saw_total_spins','0'))||0)),
+   characters_collected:owned.length,
+   best_rarity:read('saw_best_rarity','None'),
+   crafted_variants:crafted.reduce((n,item)=>n+Math.max(1,Number(item?.count)||1),0),
+   updated_at:new Date().toISOString()
+  };
+ }
+ async function syncPublicProfile(){
+  const client=window.spinWinSupabase,user=window.spinWinOnlineUser;
+  if(!client||!user)return;
+  const {error}=await client.from('player_public_profiles').upsert({user_id:user.id,...localSnapshot()},{onConflict:'user_id'});
+  if(error){window.spinWinPublicProfileError=error.message||String(error);console.warn('[Spin & Win] Public profile sync failed:',window.spinWinPublicProfileError);return;}
+  window.spinWinPublicProfileError=null;
+ }
+ window.spinWinSyncPublicProfile=syncPublicProfile;
+ async function openPlayerProfile(userId){
+  const client=window.spinWinSupabase,current=window.spinWinOnlineUser;
+  if(!client||!current){setText('playerProfileStatus','Please log in to view player profiles.');screen.classList.remove('hidden');return;}
+  returnToProgress=!!($('progressHub')&&!$('progressHub').classList.contains('hidden'));
+  $('menu')?.classList.add('hidden');$('progressHub')?.classList.add('hidden');
+  screen.classList.remove('hidden');
+  setText('playerProfileStatus','Loading player profile…');
+  setText('playerProfileName','LOADING');setText('playerProfileTag','ONLINE PLAYER');
+  try{
+   if(userId===current.id)await syncPublicProfile();
+   const [profileResult,publicResult,scoreResult]=await Promise.all([
+    client.from('profiles').select('id,username').eq('id',userId).maybeSingle(),
+    client.from('player_public_profiles').select('equipped_character,equipped_aura,equipped_title,trophies,total_spins,characters_collected,best_rarity,crafted_variants,updated_at').eq('user_id',userId).maybeSingle(),
+    client.from('player_scores').select('trophies').eq('user_id',userId).maybeSingle()
+   ]);
+   if(profileResult.error)throw profileResult.error;
+   if(publicResult.error)throw publicResult.error;
+   if(scoreResult.error)throw scoreResult.error;
+   if(!profileResult.data)throw new Error('This player profile could not be found.');
+   const data=publicResult.data||{};
+   const trophies=Math.max(0,Number(scoreResult.data?.trophies??data.trophies)||0);
+   const rankResult=await client.from('player_scores').select('user_id,trophies').order('trophies',{ascending:false}).limit(1000);
+   if(rankResult.error)throw rankResult.error;
+   const rank=(rankResult.data||[]).findIndex(row=>row.user_id===userId);
+   setText('playerProfileName',profileResult.data.username||'Player');
+   setText('playerProfileTag',userId===current.id?'YOUR ACCOUNT · ONLINE':'ONLINE PLAYER');
+   setText('playerProfileAvatar',(profileResult.data.username||'P').slice(0,1).toUpperCase());
+   setText('playerProfileTitle',data.equipped_title||'No title equipped');
+   setText('playerProfileRank',rank>=0?'RANK #'+(rank+1):'UNRANKED');
+   setText('playerProfileCharacter',pretty(data.equipped_character||'stickman'));
+   setText('playerProfileAura',pretty(data.equipped_aura||'white'));
+   setText('playerProfileBestRarity',data.best_rarity||'None');
+   setText('playerProfileTrophies',fmt(trophies));
+   setText('playerProfileSpins',fmt(data.total_spins));
+   setText('playerProfileCharacters',fmt(data.characters_collected));
+   setText('playerProfileCrafts',fmt(data.crafted_variants));
+   setText('playerProfileStatus','PLAYER PROFILE LOADED');
+   setText('playerProfileFooter',userId===current.id?'This is your public player showcase.':'Public showcase data last synced '+(data.updated_at?new Date(data.updated_at).toLocaleString():'not yet synced')+'.');
+  }catch(error){
+   console.warn('[Spin & Win] Could not load player profile:',error.message||error);
+   setText('playerProfileStatus',error.message||'Could not load this player profile.');
+  }
+ }
+ window.openSpinWinPlayerProfile=openPlayerProfile;
+ $('playerProfileButton')?.addEventListener('click',()=>{
+  const user=window.spinWinOnlineUser;
+  if(user)openPlayerProfile(user.id);else{screen.classList.remove('hidden');setText('playerProfileStatus','Please log in to view your player profile.');}
+ });
+ $('playerProfileClose')?.addEventListener('click',()=>{
+  screen.classList.add('hidden');
+  if(returnToProgress){$('progressHub')?.classList.remove('hidden');if(typeof window.renderProgressHub==='function')window.renderProgressHub();}
+  else $('menu')?.classList.remove('hidden');
+ });
+ window.addEventListener('spinwin:online-ready',()=>{syncPublicProfile().catch(error=>console.warn('[Spin & Win] Profile sync failed:',error));});
+})();
+</script>
 
 </body>
 </html>
