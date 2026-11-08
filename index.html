@@ -1691,6 +1691,8 @@ button:hover{background:#29b84d;transform:scale(1.055);box-shadow:0 0 28px #39ff
 .eventCharacterCard{background:linear-gradient(150deg,#281824,#11131c)!important;border-color:#a55239!important;box-shadow:inset 0 0 18px #ff673014}
 .eventCharacterCard img{background:#fff;border:2px solid #e57a4c;box-shadow:0 0 18px #ff5b2633}
 .eventRaritySection:before{content:"🕸️   🎃   🦇";display:block;text-align:right;color:#ff995e;letter-spacing:13px;opacity:.65;font-size:18px}
+
+#openAdminPanelButton[hidden]{display:none!important}
 </style>
 
 <style id="spinwin-polish-pass">
@@ -2383,20 +2385,19 @@ button:hover{background:#29b84d;transform:scale(1.055);box-shadow:0 0 28px #39ff
   </section>
 
   <div id="adminGate" class="hidden" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
-    <form id="adminGateForm" class="adminGateCard" autocomplete="off">
-      <button type="button" id="adminGateClose" class="adminSmallClose" aria-label="Close access prompt">×</button>
-      <div class="adminKicker">SPIN &amp; WIN • RESTRICTED</div>
-      <h2 id="adminGateTitle">OWNER ACCESS</h2>
-      <p>Enter the owner code to open your control panel.</p>
-      <input id="adminCodeInput" type="password" placeholder="Owner code" autocomplete="off" spellcheck="false" aria-label="Owner code">
-      <button class="adminAction primary" type="submit">UNLOCK PANEL</button>
-      <div id="adminGateFeedback" class="adminFeedback" aria-live="polite"></div>
-      <button id="openUpdateLog" type="button" class="adminAction" style="width:100%;margin-top:12px;border-color:#65d878;color:#a7ffb2;background:linear-gradient(180deg,#173b24,#102719)">📜 UPDATE LOG</button>
-    </form>
+  <div class="adminGateCard" role="group" aria-label="Game settings">
+    <button id="adminGateClose" class="adminSmallClose" type="button" aria-label="Close settings">×</button>
+    <div class="adminKicker">SPIN &amp; WIN • GAME MENU</div>
+    <h2 id="adminGateTitle">SETTINGS</h2>
+    <p>Open the release notes or manage the game settings available to your account.</p>
+    <button id="openUpdateLog" type="button" class="adminAction" style="width:100%;margin-top:12px;border-color:#65d878;color:#a7ffb2;background:linear-gradient(180deg,#173b24,#102719)">📜 UPDATE LOG</button>
+    <button id="openAdminPanelButton" type="button" class="adminAction primary" hidden style="width:100%;margin-top:10px">⚙ ADMIN PANEL</button>
+    <div id="adminGateFeedback" class="adminFeedback" aria-live="polite"></div>
   </div>
-  <section id="adminPanel" class="hidden" role="dialog" aria-label="Spin and Win owner panel">
+</div>
+  <section id="adminPanel" class="hidden" role="dialog" aria-label="Spin and Win admin panel">
     <header id="adminPanelHead" class="adminTitlebar">
-      <div><span class="adminKicker">OWNER TOOLS</span><strong>⚙ SPIN &amp; WIN ADMIN</strong></div>
+      <div><span class="adminKicker">RESTRICTED TO VERIFIED ACCOUNTS</span><strong>⚙ SPIN &amp; WIN ADMIN</strong></div>
       <div class="adminTitleActions"><button id="adminMinimize" type="button" title="Minimize">−</button><button id="adminClose" type="button" title="Close panel">×</button></div>
     </header>
     <div id="adminBody" class="adminBody">
@@ -2438,7 +2439,7 @@ button:hover{background:#29b84d;transform:scale(1.055);box-shadow:0 0 28px #39ff
       <svg class="hDecor hMenuBat" viewBox="0 0 120 64"><path d="M4 15L25 27L36 7L49 25L60 16L71 25L84 7L95 27L116 15L107 43Q98 55 82 45L60 31L38 45Q22 55 13 43Z" fill="#34263f" stroke="#a78ac7" stroke-width="3" stroke-linejoin="round"/><circle cx="48" cy="35" r="2.6" fill="#ffd16b"/><circle cx="72" cy="35" r="2.6" fill="#ffd16b"/></svg>
       <svg class="hDecor hMenuPumpkin" viewBox="0 0 84 76"><path d="M39 17Q34 6 45 4L51 6L48 20" fill="#5a8b49" stroke="#304a2b" stroke-width="3"/><path d="M42 18C24 8 9 26 10 45C10 63 24 70 42 67C60 70 74 62 74 45C75 25 60 8 42 18Z" fill="#e87a2f" stroke="#8c3b20" stroke-width="4"/><path d="M26 26L35 37L24 39ZM58 26L49 37L60 39Z" fill="#321d27" stroke="#321d27" stroke-width="2"/><path d="M28 48L36 44L42 50L49 44L57 48L53 57L32 57Z" fill="#321d27"/><path d="M28 23Q20 41 28 59M42 18Q37 42 42 66M56 23Q64 41 56 59" fill="none" stroke="#ffad55" stroke-width="3" opacity=".7"/></svg>
     </div>
-      <button id="adminGear" type="button" aria-label="Open owner tools" title="Owner tools">⚙</button>
+      <button id="adminGear" type="button" aria-label="Open settings" title="Settings">⚙</button>
     <h1>SPIN &amp; WIN</h1>
     <div class="subtitle">SPIN • COLLECT • SHOW OFF</div>
 
@@ -5117,13 +5118,12 @@ setupAutoRollWidget();
 
 
 
-/* === OWNER ADMIN PANEL === */
+/* === SUPABASE-VERIFIED ADMIN PANEL + PUBLIC SETTINGS === */
 let adminUnlocked=false;
 const adminGear=document.getElementById('adminGear');
 const adminGate=document.getElementById('adminGate');
-const adminGateForm=document.getElementById('adminGateForm');
-const adminCodeInput=document.getElementById('adminCodeInput');
 const adminGateFeedback=document.getElementById('adminGateFeedback');
+const openAdminPanelButton=document.getElementById('openAdminPanelButton');
 const adminPanel=document.getElementById('adminPanel');
 const adminPanelHead=document.getElementById('adminPanelHead');
 const adminBody=document.getElementById('adminBody');
@@ -5136,26 +5136,57 @@ function setAdminStatus(message,good=true){
   const t=document.getElementById('adminTrophiesCurrent');if(t)t.textContent=gameTrophies.toLocaleString();
   const v=document.getElementById('adminVouchersCurrent');if(v)v.textContent=titleVouchers.toLocaleString();
 }
+async function checkSupabaseAdmin(){
+  const sb=window.spinWinSupabase;
+  const user=window.spinWinOnlineUser;
+  if(!sb||!user||typeof sb.rpc!=='function')return false;
+  const {data,error}=await sb.rpc('spinwin_is_admin');
+  if(error)throw error;
+  return data===true;
+}
+async function refreshAdminVisibility(){
+  adminUnlocked=false;
+  if(openAdminPanelButton)openAdminPanelButton.hidden=true;
+  try{
+    const allowed=await checkSupabaseAdmin();
+    adminUnlocked=allowed;
+    if(openAdminPanelButton)openAdminPanelButton.hidden=!allowed;
+    if(adminGateFeedback)adminGateFeedback.textContent=allowed?'Verified admin account.':' ';
+    return allowed;
+  }catch(error){
+    if(adminGateFeedback)adminGateFeedback.textContent='Could not verify admin access. Please refresh and sign in again.';
+    console.warn('[Spin & Win] Admin verification failed:',error.message||error);
+    return false;
+  }
+}
 function openAdminPanel(){
   adminGate.classList.add('hidden');adminPanel.classList.remove('hidden');
   if(adminPanel.classList.contains('is-minimized'))adminPanel.classList.remove('is-minimized');
   if(adminMinimize)adminMinimize.textContent='−';
-  setAdminStatus('Owner panel ready.');
+  setAdminStatus('Supabase-verified admin panel ready.');
 }
-if(adminGear)adminGear.addEventListener('click',()=>{
-  if(adminUnlocked){openAdminPanel();return;}
-  adminGate.classList.remove('hidden');if(adminGateFeedback)adminGateFeedback.textContent='';if(adminCodeInput){adminCodeInput.value='';setTimeout(()=>adminCodeInput.focus(),0);}
+if(adminGear)adminGear.addEventListener('click',async()=>{
+  adminUnlocked=false;
+  if(openAdminPanelButton)openAdminPanelButton.hidden=true;
+  if(adminGateFeedback)adminGateFeedback.textContent='Checking account permissions…';
+  adminGate.classList.remove('hidden');
+  await refreshAdminVisibility();
 });
-const gateClose=document.getElementById('adminGateClose');if(gateClose)gateClose.addEventListener('click',()=>adminGate.classList.add('hidden'));
-if(adminGateForm)adminGateForm.addEventListener('submit',e=>{
-  e.preventDefault();
-  if((adminCodeInput.value||'').trim()==='ik ben beneden'){
-    adminUnlocked=true;openAdminPanel();if(adminCodeInput)adminCodeInput.value='';
-    if(adminGateFeedback)adminGateFeedback.textContent='';
-  }else{
-    if(adminGateFeedback)adminGateFeedback.textContent='Wrong owner code. Try again.';
-    if(adminCodeInput){adminCodeInput.select();}
-  }
+const gateClose=document.getElementById('adminGateClose');
+if(gateClose)gateClose.addEventListener('click',()=>adminGate.classList.add('hidden'));
+if(openAdminPanelButton)openAdminPanelButton.addEventListener('click',async()=>{
+  openAdminPanelButton.disabled=true;
+  if(adminGateFeedback)adminGateFeedback.textContent='Verifying admin access…';
+  try{
+    const allowed=await checkSupabaseAdmin();
+    adminUnlocked=allowed;
+    if(!allowed){openAdminPanelButton.hidden=true;if(adminGateFeedback)adminGateFeedback.textContent='This account is not authorised to use the Admin Panel.';return;}
+    openAdminPanel();
+  }catch(error){
+    adminUnlocked=false;openAdminPanelButton.hidden=true;
+    if(adminGateFeedback)adminGateFeedback.textContent='Admin verification failed. Please sign in again.';
+    console.warn('[Spin & Win] Admin panel access check failed:',error.message||error);
+  }finally{openAdminPanelButton.disabled=false;}
 });
 if(adminClose)adminClose.addEventListener('click',()=>adminPanel.classList.add('hidden'));
 if(adminMinimize)adminMinimize.addEventListener('click',()=>{
@@ -5372,12 +5403,12 @@ setAdminStatus('Owner panel ready.');
   // This is a player preference in the gear/code-entry window, NOT an owner-panel tool.
   // Existing saves keep their choice; brand-new saves default to ON.
   if(localStorage.getItem('spinwin_rare_animations')===null)localStorage.setItem('spinwin_rare_animations','on');
-  const gateForm=$('adminGateForm');
+  const gateForm=document.querySelector('#adminGate .adminGateCard');
   if(gateForm&&!$('gateRareAnimationSettingRow')){
    const row=document.createElement('div');row.id='gateRareAnimationSettingRow';
    row.innerHTML='<div class="settingCopy"><strong>RARE REVEAL ANIMATIONS</strong><small>Character and aura reveals, including duplicates. This setting is saved on this device.</small></div><button id="gateRareAnimationToggle" type="button" aria-pressed="true">ON</button>';
-   const submit=gateForm.querySelector('button[type="submit"]');
-   if(submit)submit.insertAdjacentElement('beforebegin',row);else gateForm.appendChild(row);
+   const updateLogButton=$('openUpdateLog');
+   if(updateLogButton)updateLogButton.insertAdjacentElement('beforebegin',row);else gateForm.appendChild(row);
    const b=$('gateRareAnimationToggle');
    const update=()=>{const on=localStorage.getItem('spinwin_rare_animations')!=='off';b.textContent=on?'ON':'OFF';b.setAttribute('aria-pressed',String(on));};
    b.addEventListener('click',()=>{localStorage.setItem('spinwin_rare_animations',localStorage.getItem('spinwin_rare_animations')==='off'?'on':'off');update();});update();
