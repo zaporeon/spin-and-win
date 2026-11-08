@@ -5816,43 +5816,56 @@ setAdminStatus('Owner panel ready.');
    });
  }
  let cloudSaveTimer=null,cloudSaveInterval=null,cloudSaveBusy=false,cloudSaveQueued=false;
+ let cloudResetVersion=null,cloudSyncBlocked=false;
+ function isCloudResetVersionError(error){
+   const message=String(error?.message||error||'').toLowerCase();
+   return message.includes('outdated because a global reset occurred')||message.includes('refresh the game to load the latest save');
+ }
+ function blockCloudSyncForReset(error){
+   cloudSyncBlocked=true;
+   cloudSaveQueued=false;
+   window.spinWinCloudSyncBlocked=true;
+   window.spinWinCloudSaveError='A global reset happened while this game tab was open. Refresh the game to load the current save safely.';
+   console.warn('[Spin & Win] Cloud sync paused because this tab has an outdated reset version:',error?.message||error);
+   window.dispatchEvent(new CustomEvent('spinwin:cloud-reset-required'));
+ }
  async function syncLeaderboardScore(){
-   const user=window.spinWinOnlineUser;if(!user)return;
+   const user=window.spinWinOnlineUser;if(!user||cloudSyncBlocked||!Number.isSafeInteger(cloudResetVersion))return;
    const trophies=Math.max(0,Math.floor(Number(localStorage.getItem('saw_game_trophies'))||0));
-   const {error}=await client.from('player_scores').upsert({user_id:user.id,trophies,updated_at:new Date().toISOString()},{onConflict:'user_id'});
-   if(error){window.spinWinLeaderboardError=error.message||String(error);console.warn('[Spin & Win] Leaderboard score sync failed:',window.spinWinLeaderboardError);return;}
+   const {error}=await client.rpc('spinwin_save_player_score',{p_trophies:trophies,p_reset_version:cloudResetVersion});
+   if(error){if(isCloudResetVersionError(error)){blockCloudSyncForReset(error);return;}window.spinWinLeaderboardError=error.message||String(error);console.warn('[Spin & Win] Leaderboard score sync failed:',window.spinWinLeaderboardError);return;}
    window.spinWinLeaderboardError=null;
    window.dispatchEvent(new CustomEvent('spinwin:leaderboard-updated'));
  }
  async function writeCloudSave(){
    const user=window.spinWinOnlineUser;
-   if(!user)return;
+   if(!user||cloudSyncBlocked||!Number.isSafeInteger(cloudResetVersion))return;
    if(cloudSaveBusy){cloudSaveQueued=true;return;}
    cloudSaveBusy=true;
    try{
-     const {error}=await client.from('game_saves').upsert({
-       user_id:user.id,
-       save_data:collectGameSave(),
-       updated_at:new Date().toISOString()
-     },{onConflict:'user_id'});
-     if(error)throw error;
+     const {error}=await client.rpc('spinwin_save_game_state',{
+       p_save_data:collectGameSave(),
+       p_reset_version:cloudResetVersion
+     });
+     if(error){if(isCloudResetVersionError(error)){blockCloudSyncForReset(error);return;}throw error;}
      window.spinWinCloudSaveLastSuccess=Date.now();
      await syncLeaderboardScore();
-     if(window.spinWinSyncPublicProfile)await window.spinWinSyncPublicProfile();
+     if(!cloudSyncBlocked&&window.spinWinSyncPublicProfile)await window.spinWinSyncPublicProfile();
    }catch(error){
      console.warn('[Spin & Win] Cloud save failed:',error.message||error);
      window.spinWinCloudSaveError=error.message||String(error);
    }finally{
      cloudSaveBusy=false;
-     if(cloudSaveQueued){cloudSaveQueued=false;setTimeout(writeCloudSave,250);}
+     if(cloudSaveQueued&&!cloudSyncBlocked){cloudSaveQueued=false;setTimeout(writeCloudSave,250);}else{cloudSaveQueued=false;}
    }
  }
  function scheduleCloudSave(){
-   if(!window.spinWinOnlineUser)return;
+   if(!window.spinWinOnlineUser||cloudSyncBlocked)return;
    clearTimeout(cloudSaveTimer);
    cloudSaveTimer=setTimeout(writeCloudSave,900);
  }
  function startCloudSync(){
+   if(cloudSyncBlocked||!Number.isSafeInteger(cloudResetVersion))return;
    if(!window.__spinWinCloudStorageHook){
      const originalSetItem=Storage.prototype.setItem;
      const originalRemoveItem=Storage.prototype.removeItem;
@@ -5888,24 +5901,25 @@ setAdminStatus('Owner panel ready.');
      const profile=await ensureProfile(user);
      // Server-owned entitlement: players cannot grant this title through local storage or Title Vouchers.
      try{const {data:testerAward,error:testerAwardError}=await client.from('spinwin_title_awards').select('title_key').eq('user_id',user.id).eq('title_key','pre_release_tester').maybeSingle();if(testerAwardError)throw testerAwardError;if(testerAward){if(!unlockedTitles.includes('Pre-Release Tester'))unlockedTitles.push('Pre-Release Tester');localStorage.setItem('saw_unlocked_titles',JSON.stringify(unlockedTitles));localStorage.setItem('saw_pre_release_tester_award','1');try{renderTitleEditor();}catch(_){}}}catch(awardError){console.warn('[Spin & Win] Could not refresh verified title awards:',awardError.message||awardError);}
-     const restoreFlag='spinwin_cloud_restore_once_'+user.id;
-     if(sessionStorage.getItem(restoreFlag)==='1'){
-       sessionStorage.removeItem(restoreFlag);
-     }else{
-       const {data:cloudSave,error:loadError}=await client.from('game_saves').select('save_data').eq('user_id',user.id).maybeSingle();
-       if(loadError)throw loadError;
-       if(cloudSave&&cloudSave.save_data&&typeof cloudSave.save_data==='object'&&!Array.isArray(cloudSave.save_data)){
-         restoreGameSave(cloudSave.save_data);
-         sessionStorage.setItem(restoreFlag,'1');
-         location.reload();
-         return;
-       }
-       // First login: keep this browser's current game state and create the player's first cloud save.
-       const {error:createSaveError}=await client.from('game_saves').upsert({
-         user_id:user.id,save_data:collectGameSave(),updated_at:new Date().toISOString()
-       },{onConflict:'user_id'});
-       if(createSaveError)throw createSaveError;
+     // The server's reset version is authoritative. Every new tab compares it before
+     // enabling cloud writes; an empty save is still a real, authoritative reset.
+     const {data:cloudState,error:loadStateError}=await client.rpc('spinwin_load_game_state');
+     if(loadStateError)throw loadStateError;
+     const resetVersion=Number(cloudState?.reset_version);
+     if(!Number.isSafeInteger(resetVersion)||resetVersion<1)throw new Error('The cloud save version could not be verified. Please refresh and try again.');
+     const remoteSave=cloudState?.save_data;
+     if(!remoteSave||typeof remoteSave!=='object'||Array.isArray(remoteSave))throw new Error('The cloud save data is invalid. Please contact the game owner.');
+     const restoreFlag='spinwin_cloud_restore_v33_'+user.id;
+     if(sessionStorage.getItem(restoreFlag)!==String(resetVersion)){
+       restoreGameSave(remoteSave);
+       sessionStorage.setItem(restoreFlag,String(resetVersion));
+       location.reload();
+       return;
      }
+     cloudResetVersion=resetVersion;
+     cloudSyncBlocked=false;
+     window.spinWinCloudResetVersion=resetVersion;
+     window.spinWinCloudSyncBlocked=false;
      window.spinWinOnlineUser={id:user.id,email:user.email,username:profile.username};
      startCloudSync();
      gate.hidden=true;
@@ -6139,8 +6153,9 @@ setAdminStatus('Owner panel ready.');
  async function syncPublicProfile(){
   const client=window.spinWinSupabase,user=window.spinWinOnlineUser;
   if(!client||!user)return;
-  const {error}=await client.from('player_public_profiles').upsert({user_id:user.id,...localSnapshot()},{onConflict:'user_id'});
-  if(error){window.spinWinPublicProfileError=error.message||String(error);console.warn('[Spin & Win] Public profile sync failed:',window.spinWinPublicProfileError);return;}
+  if(cloudSyncBlocked||!Number.isSafeInteger(cloudResetVersion))return;
+  const {error}=await client.rpc('spinwin_save_public_profile',{p_profile:localSnapshot(),p_reset_version:cloudResetVersion});
+  if(error){if(isCloudResetVersionError(error)){blockCloudSyncForReset(error);return;}window.spinWinPublicProfileError=error.message||String(error);console.warn('[Spin & Win] Public profile sync failed:',window.spinWinPublicProfileError);return;}
   window.spinWinPublicProfileError=null;
  }
  window.spinWinSyncPublicProfile=syncPublicProfile;
